@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Football Legends</title>
+    <style>
+        body { background: #1a472a; margin: 0; overflow: hidden; font-family: sans-serif; color: white; touch-action: none; }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; pointer-events: none; font-weight: bold; font-size: 20px; }
+        canvas { display: block; background: #2e7d32; }
+    </style>
+</head>
+<body>
+    <div id="ui">YOU: <span id="ps">0</span> | CPU: <span id="cs">0</span></div>
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        const psText = document.getElementById("ps");
+        const csText = document.getElementById("cs");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let pScore = 0, cScore = 0;
+        
+        // Game Objects
+        let ball = { x: canvas.width/2, y: canvas.height/2, radius: 8, carrier: null };
+        let player = { x: canvas.width/2, y: canvas.height - 100, size: 25, color: '#007bff' };
+        let cpu = { x: canvas.width/2, y: 100, size: 25, color: '#dc3545', speed: 2.5 };
+
+        // Touch Input
+        canvas.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            player.x = touch.clientX;
+            player.y = touch.clientY;
+            e.preventDefault();
+        }, { passive: false });
+
+        function checkTackle() {
+            // Distance formula to see if players touch
+            let dist = Math.hypot(player.x - cpu.x, player.y - cpu.y);
+            if (dist < player.size + cpu.size) {
+                // Tackle happens: Ball goes loose
+                ball.carrier = null;
+                ball.x = (player.x + cpu.x) / 2;
+                ball.y = (player.y + cpu.y) / 2;
+            }
+
+            // Check if player or CPU picks up the ball
+            let distP = Math.hypot(player.x - ball.x, player.y - ball.y);
+            if (distP < player.size) ball.carrier = 'player';
+
+            let distC = Math.hypot(cpu.x - ball.x, cpu.y - ball.y);
+            if (distC < cpu.size) ball.carrier = 'cpu';
+        }
+
+        function update() {
+            if (ball.carrier === 'player') {
+                ball.x = player.x; ball.y = player.y;
+                if (ball.y < 40) { pScore++; reset(); } // Score Touchdown
+            } else if (ball.carrier === 'cpu') {
+                ball.x = cpu.x; ball.y = cpu.y;
+                if (ball.y > canvas.height - 40) { cScore++; reset(); } // CPU Touchdown
+            }
+
+            // CPU Logic: Less "Smart"
+            // CPU moves toward the ball if loose, or toward player if player has ball
+            let targetX = ball.carrier === 'player' ? player.x : ball.x;
+            let targetY = ball.carrier === 'player' ? player.y : ball.y;
+            
+            if (cpu.x < targetX) cpu.x += cpu.speed;
+            else cpu.x -= cpu.speed;
+            
+            if (cpu.y < targetY) cpu.y += cpu.speed;
+            else cpu.y -= cpu.speed;
+
+            checkTackle();
+        }
+
+        function reset() {
+            psText.innerText = pScore;
+            csText.innerText = cScore;
+            ball.carrier = null;
+            ball.x = canvas.width/2;
+            ball.y = canvas.height/2;
+            cpu.x = canvas.width/2;
+            cpu.y = 100;
+        }
+
+        function draw() {
+            // Draw Field
+            ctx.fillStyle = "#2e7d32";
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            
+            // Endzones
+            ctx.fillStyle = "rgba(255,255,255,0.2)";
+            ctx.fillRect(0, 0, canvas.width, 40); // Top Endzone
+            ctx.fillRect(0, canvas.height - 40, canvas.width, 40); // Bottom Endzone
+
+            // Yard Lines
+            ctx.strokeStyle = "white";
+            for(let i=0; i<canvas.height; i+=50) {
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+            }
+
+            // Players
+            ctx.fillStyle = player.color;
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.size, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = cpu.color;
+            ctx.beginPath(); ctx.arc(cpu.x, cpu.y, cpu.size, 0, Math.PI*2); ctx.fill();
+
+            // Ball (Brown)
+            ctx.fillStyle = "#8B4513";
+            ctx.beginPath(); ctx.ellipse(ball.x, ball.y, 12, 8, ball.carrier ? 0.5 : 0, 0, Math.PI*2); ctx.fill();
+        }
+
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        loop();
+    </script>
+</body>
+</html>
