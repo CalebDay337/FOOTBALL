@@ -5,116 +5,123 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Football Legends</title>
     <style>
-        body { background: #1a472a; margin: 0; overflow: hidden; font-family: sans-serif; color: white; touch-action: none; }
-        #ui { position: absolute; top: 10px; width: 100%; text-align: center; pointer-events: none; font-weight: bold; font-size: 20px; }
+        body { background: #1a472a; margin: 0; overflow: hidden; font-family: 'Arial Black', sans-serif; color: white; touch-action: none; }
+        #ui { position: absolute; top: 10px; width: 100%; text-align: center; pointer-events: none; z-index: 10; font-size: 18px; text-shadow: 2px 2px black; }
         canvas { display: block; background: #2e7d32; }
     </style>
 </head>
 <body>
-    <div id="ui">YOU: <span id="ps">0</span> | CPU: <span id="cs">0</span></div>
+    <div id="ui">SCORE: <span id="score">0</span></div>
     <canvas id="game"></canvas>
 
     <script>
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
-        const psText = document.getElementById("ps");
-        const csText = document.getElementById("cs");
+        const scoreText = document.getElementById("score");
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let pScore = 0, cScore = 0;
-        
-        // Game Objects
-        let ball = { x: canvas.width/2, y: canvas.height/2, radius: 8, carrier: null };
-        let player = { x: canvas.width/2, y: canvas.height - 100, size: 25, color: '#007bff' };
-        let cpu = { x: canvas.width/2, y: 100, size: 25, color: '#dc3545', speed: 2.5 };
+        let score = 0;
+        let gameActive = true;
 
-        // Touch Input
+        // Player setup (Slower, realistic movement)
+        let player = { x: canvas.width/2, y: canvas.height - 80, size: 15, targetX: canvas.width/2, targetY: canvas.height - 80 };
+
+        // Massive Player Array (10 teammates, 10 enemies)
+        let bots = [];
+        for(let i = 0; i < 20; i++) {
+            bots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * (canvas.height - 200) + 100,
+                size: 15,
+                team: i < 10 ? 'blue' : 'red', // 10 Blue, 10 Red
+                speed: 1 + Math.random() * 1.5
+            });
+        }
+
         canvas.addEventListener('touchmove', (e) => {
             const touch = e.touches[0];
-            player.x = touch.clientX;
-            player.y = touch.clientY;
+            player.targetX = touch.clientX;
+            player.targetY = touch.clientY;
             e.preventDefault();
         }, { passive: false });
 
-        function checkTackle() {
-            // Distance formula to see if players touch
-            let dist = Math.hypot(player.x - cpu.x, player.y - cpu.y);
-            if (dist < player.size + cpu.size) {
-                // Tackle happens: Ball goes loose
-                ball.carrier = null;
-                ball.x = (player.x + cpu.x) / 2;
-                ball.y = (player.y + cpu.y) / 2;
-            }
-
-            // Check if player or CPU picks up the ball
-            let distP = Math.hypot(player.x - ball.x, player.y - ball.y);
-            if (distP < player.size) ball.carrier = 'player';
-
-            let distC = Math.hypot(cpu.x - ball.x, cpu.y - ball.y);
-            if (distC < cpu.size) ball.carrier = 'cpu';
+        function drawPlayer(x, y, color, isMain) {
+            // Shoulders/Jersey
+            ctx.fillStyle = color;
+            ctx.fillRect(x - 12, y - 5, 24, 15);
+            // Helmet
+            ctx.fillStyle = isMain ? "#ffd700" : "white"; // Gold helmet for you
+            ctx.beginPath(); ctx.arc(x, y - 8, 8, 0, Math.PI * 2); ctx.fill();
+            // Face mask line
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x - 5, y - 6); ctx.lineTo(x + 5, y - 6); ctx.stroke();
         }
 
         function update() {
-            if (ball.carrier === 'player') {
-                ball.x = player.x; ball.y = player.y;
-                if (ball.y < 40) { pScore++; reset(); } // Score Touchdown
-            } else if (ball.carrier === 'cpu') {
-                ball.x = cpu.x; ball.y = cpu.y;
-                if (ball.y > canvas.height - 40) { cScore++; reset(); } // CPU Touchdown
+            if (!gameActive) return;
+
+            // Move player toward touch (Added friction so you aren't "too fast")
+            player.x += (player.targetX - player.x) * 0.1;
+            player.y += (player.targetY - player.y) * 0.1;
+
+            bots.forEach(bot => {
+                if (bot.team === 'red') {
+                    // Defenders try to tackle you
+                    let dx = player.x - bot.x;
+                    let dy = player.y - bot.y;
+                    let dist = Math.hypot(dx, dy);
+                    bot.x += (dx / dist) * bot.speed;
+                    bot.y += (dy / dist) * bot.speed;
+
+                    // Check Tackle
+                    if (dist < 20) {
+                        score = 0; 
+                        scoreText.innerText = score;
+                        player.x = canvas.width/2; 
+                        player.y = canvas.height - 80;
+                        player.targetX = player.x;
+                        player.targetY = player.y;
+                    }
+                } else {
+                    // Teammates move up field to block
+                    bot.y -= bot.speed;
+                    if (bot.y < 0) bot.y = canvas.height;
+                }
+            });
+
+            // Touchdown check
+            if (player.y < 40) {
+                score++;
+                scoreText.innerText = score;
+                player.y = canvas.height - 80;
+                player.targetY = player.y;
             }
-
-            // CPU Logic: Less "Smart"
-            // CPU moves toward the ball if loose, or toward player if player has ball
-            let targetX = ball.carrier === 'player' ? player.x : ball.x;
-            let targetY = ball.carrier === 'player' ? player.y : ball.y;
-            
-            if (cpu.x < targetX) cpu.x += cpu.speed;
-            else cpu.x -= cpu.speed;
-            
-            if (cpu.y < targetY) cpu.y += cpu.speed;
-            else cpu.y -= cpu.speed;
-
-            checkTackle();
-        }
-
-        function reset() {
-            psText.innerText = pScore;
-            csText.innerText = cScore;
-            ball.carrier = null;
-            ball.x = canvas.width/2;
-            ball.y = canvas.height/2;
-            cpu.x = canvas.width/2;
-            cpu.y = 100;
         }
 
         function draw() {
-            // Draw Field
+            // Grass
             ctx.fillStyle = "#2e7d32";
-            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Endzones
-            ctx.fillStyle = "rgba(255,255,255,0.2)";
-            ctx.fillRect(0, 0, canvas.width, 40); // Top Endzone
-            ctx.fillRect(0, canvas.height - 40, canvas.width, 40); // Bottom Endzone
-
             // Yard Lines
-            ctx.strokeStyle = "white";
-            for(let i=0; i<canvas.height; i+=50) {
+            ctx.strokeStyle = "rgba(255,255,255,0.3)";
+            ctx.lineWidth = 2;
+            for(let i = 0; i < canvas.height; i += 60) {
                 ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
             }
 
-            // Players
-            ctx.fillStyle = player.color;
-            ctx.beginPath(); ctx.arc(player.x, player.y, player.size, 0, Math.PI*2); ctx.fill();
-            
-            ctx.fillStyle = cpu.color;
-            ctx.beginPath(); ctx.arc(cpu.x, cpu.y, cpu.size, 0, Math.PI*2); ctx.fill();
+            // Endzone
+            ctx.fillStyle = "#1b5e20";
+            ctx.fillRect(0, 0, canvas.width, 50);
 
-            // Ball (Brown)
-            ctx.fillStyle = "#8B4513";
-            ctx.beginPath(); ctx.ellipse(ball.x, ball.y, 12, 8, ball.carrier ? 0.5 : 0, 0, Math.PI*2); ctx.fill();
+            // Draw all bots
+            bots.forEach(bot => drawPlayer(bot.x, bot.y, bot.team === 'blue' ? '#0d47a1' : '#b71c1c', false));
+
+            // Draw You
+            drawPlayer(player.x, player.y, "#2196f3", true);
         }
 
         function loop() { update(); draw(); requestAnimationFrame(loop); }
